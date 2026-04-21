@@ -1,0 +1,15 @@
+# Build artifacts
+bin/
+obj/
+
+# Editor and Tooling
+.cache/
+compile_commands.json
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
