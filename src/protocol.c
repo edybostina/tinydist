@@ -25,6 +25,46 @@ void packet_hdr_deserialize(packet_hdr_t *hdr, const uint8_t *buf)
     hdr->checksum = ntohs(hdr->checksum);
 }
 
+void tensor_meta_serialize(const tensor_meta_t *hdr, uint8_t *buf)
+{
+    tensor_meta_t data_to_send;
+    memcpy(&data_to_send, hdr, sizeof(tensor_meta_t));
+
+    data_to_send.total_bytes = htonl(hdr->total_bytes);
+    data_to_send.fragment_count = htonl(hdr->fragment_count);
+
+    for (int i = 0; i < 4; i++)
+        data_to_send.dims[i] = htonl(data_to_send.dims[i]);
+
+    memcpy(buf, &data_to_send, sizeof(tensor_meta_t));
+}
+
+void tensor_meta_deserialize(tensor_meta_t *hdr, const uint8_t *buf)
+{
+    memcpy(hdr, buf, sizeof(tensor_meta_t));
+
+    hdr->fragment_count = ntohl(hdr->fragment_count);
+    hdr->total_bytes = ntohl(hdr->total_bytes);
+
+    for (int i = 0; i < 4; i++)
+        hdr->dims[i] = ntohl(hdr->dims[i]);
+}
+
+void tensor_fragment_serialize(const tensor_fragment_t *hdr, uint8_t *buf)
+{
+    tensor_fragment_t data_to_send;
+    memcpy(&data_to_send, hdr, sizeof(tensor_fragment_t));
+
+    data_to_send.offset = htonl(data_to_send.offset);
+}
+
+void tensor_fragment_deserialize(tensor_fragment_t *hdr, const uint8_t *buf)
+{
+    memcpy(hdr, buf, sizeof(tensor_fragment_t));
+
+    hdr->offset = ntohl(hdr->offset);
+}
+
 int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, const void *data,
                 size_t total_bytes, data_type_t data_type, const uint32_t *dims, uint8_t ndims)
 {
@@ -37,7 +77,16 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
     metadata.ndims = ndims;
     memcpy(metadata.dims, dims, sizeof(uint32_t) * 4);
 
-    rc = sendto(sockfd, &, sizeof(packet_hdr_t), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    uint8_t meta_buf[sizeof(tensor_meta_t)];
+    tensor_meta_serialize(&metadata, meta_buf);
+
+    int rc;
+    rc = sendto(sockfd, &meta_buf, sizeof(packet_hdr_t), 0, dest, dest_len);
+
+    while (fragment_count) {
+        // TODO: finish this
+        tensor_fragment_t current_fragment;
+    }
 }
 
 int tensor_recv(int sockfd, float *dest_buf, uint32_t dest_buf_len);

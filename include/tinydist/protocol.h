@@ -26,7 +26,10 @@ typedef struct packet_hdr {
     uint16_t checksum;
 } __attribute__((packed)) packet_hdr_t;
 
+// serialize a packet header to a buffer ready to be sent to network
 void packet_hdr_serialize(const packet_hdr_t *hdr, uint8_t *buf);
+
+// deserialize a buffer recieved from network to a packet header
 void packet_hdr_deserialize(packet_hdr_t *hdr, const uint8_t *buf);
 
 typedef struct tensor_meta {
@@ -41,6 +44,18 @@ typedef struct tensor_meta {
 typedef struct tensor_fragment {
     uint32_t offset;
 } __attribute__((packed)) tensor_fragment_t;
+
+// serialize a tensor metadata to a buffer ready to be sent to network
+void tensor_meta_serialize(const tensor_meta_t *hdr, uint8_t *buf);
+
+// deserialize a buffer recieved from network to a tensor metadata
+void tensor_meta_deserialize(tensor_meta_t *hdr, const uint8_t *buf);
+
+// serialize a tensor fragment to a buffer ready to be sent to network
+void tensor_fragment_serialize(const tensor_fragment_t *hdr, uint8_t *buf);
+
+// deserialize a buffer recieved from network to a tensor fragment
+void tensor_fragment_deserialize(tensor_fragment_t *hdr, const uint8_t *buf);
 
 // split a tensor buf into tensor fragments, calling send for each.
 // returns number of packets sent, or -1 on error
