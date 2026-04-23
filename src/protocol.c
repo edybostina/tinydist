@@ -78,7 +78,7 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
     header.type = PACKET_TYPE_METADATA;
     header.version = PACKET_VERSION;
 
-    size_t fragment_count = (total_bytes + 1453) / 1454;
+    size_t fragment_count = (total_bytes + MAX_FRAGMENT_PAYLOAD - 1) / MAX_FRAGMENT_PAYLOAD;
 
     tensor_meta_t metadata;
     metadata.total_bytes = total_bytes;
@@ -90,7 +90,6 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
 
     tensor_meta_serialize(&metadata, meta_buf + sizeof(packet_hdr_t));
 
-    // Compute checksum over payload
     header.checksum = crc32(meta_buf + sizeof(packet_hdr_t), header.payload_len);
     packet_hdr_serialize(&header, meta_buf);
 
@@ -109,9 +108,9 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
 
     while (fragment_count) {
         size_t current_packet_size =
-            remaining_bytes <= 1452
+            remaining_bytes <= MAX_FRAGMENT_PAYLOAD
                 ? remaining_bytes + sizeof(tensor_fragment_t) + sizeof(packet_hdr_t)
-                : 1472;
+                : (MAX_FRAGMENT_PAYLOAD + sizeof(packet_hdr_t) + sizeof(tensor_fragment_t));
         size_t raw_data_to_send =
             (current_packet_size - sizeof(packet_hdr_t) - sizeof(tensor_fragment_t));
         packet_hdr_t header;
@@ -131,7 +130,6 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
         memcpy(packet_buf + sizeof(packet_hdr_t) + sizeof(tensor_fragment_t),
                (uint8_t *)data + (total_bytes - remaining_bytes), raw_data_to_send);
 
-        // Compute checksum over payload
         header.checksum = crc32(packet_buf + sizeof(packet_hdr_t), header.payload_len);
         packet_hdr_serialize(&header, packet_buf);
 
@@ -161,14 +159,6 @@ int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len, uint8_t *data
     packet_hdr_t meta_header;
     packet_hdr_deserialize(&meta_header, meta_buf);
 
-    uint32_t computed_checksum = crc32(meta_buf + sizeof(packet_hdr_t), meta_header.payload_len);
-    if (computed_checksum != meta_header.checksum) {
-        return -1;
-    }
-
-    tensor_meta_t meta;
-    tensor_meta_deserialize(&meta, meta_buf + sizeof(packet_hdr_t));
-
     if (meta_header.magic != PACKET_MAGIC) {
         return -1;
     }
@@ -176,6 +166,14 @@ int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len, uint8_t *data
     if (meta_header.type != PACKET_TYPE_METADATA) {
         return -1;
     }
+
+    uint32_t computed_checksum = crc32(meta_buf + sizeof(packet_hdr_t), meta_header.payload_len);
+    if (computed_checksum != meta_header.checksum) {
+        return -1;
+    }
+
+    tensor_meta_t meta;
+    tensor_meta_deserialize(&meta, meta_buf + sizeof(packet_hdr_t));
 
     if (meta.total_bytes > dest_buf_len) {
         // buffer is too small to recieve data
@@ -189,9 +187,9 @@ int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len, uint8_t *data
 
     while (fragment_count) {
         size_t current_packet_size =
-            remaining_bytes <= 1452
+            remaining_bytes <= MAX_FRAGMENT_PAYLOAD
                 ? remaining_bytes + sizeof(tensor_fragment_t) + sizeof(packet_hdr_t)
-                : 1472;
+                : (MAX_FRAGMENT_PAYLOAD + sizeof(packet_hdr_t) + sizeof(tensor_fragment_t));
 
         size_t raw_data_to_recv =
             (current_packet_size - sizeof(packet_hdr_t) - sizeof(tensor_fragment_t));

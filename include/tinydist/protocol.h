@@ -46,6 +46,8 @@ typedef struct tensor_fragment {
     uint32_t offset;
 } __attribute__((packed)) tensor_fragment_t;
 
+#define MAX_FRAGMENT_PAYLOAD (1472 - sizeof(packet_hdr_t) - sizeof(tensor_fragment_t))
+
 // serialize a tensor metadata to a buffer ready to be sent to network
 void tensor_meta_serialize(const tensor_meta_t *hdr, uint8_t *buf);
 
