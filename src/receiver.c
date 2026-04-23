@@ -1,3 +1,4 @@
+#include "tinydist/nn.h"
 #include "tinydist/protocol.h"
 #include <arpa/inet.h>
 #include <stdbool.h>
@@ -30,7 +31,7 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    float recv_buf[6];
+    float recv_buf[3];
     uint8_t data_type;
 
     printf("Receiver: waiting for tensor...\n");
@@ -42,14 +43,31 @@ int main()
     }
 
     printf("Receiver: received %d bytes, type %u\n", rc, data_type);
-    if (data_type == PACKET_TENSOR_TYPE_FLOAT32) {
-        for (int i = 0; i < 2; i++) {
-            for (int j = 0; j < 3; j++) {
-                printf("%.1f ", recv_buf[i * 3 + j]);
-            }
-            printf("\n");
-        }
+    if (data_type != PACKET_TENSOR_TYPE_FLOAT32) {
+        fprintf(stderr, "unexpected data type\n");
+        exit(EXIT_FAILURE);
     }
+
+    printf("Receiver: received 3-element vector: [ ");
+    for (int i = 0; i < 3; i++) {
+        printf("%.4f ", recv_buf[i]);
+    }
+    printf("]\n");
+
+    float W2[2 * 3] = {0.5f, -0.5f, 1.0f, -1.0f, 0.5f, 0.5f};
+
+    float b2[2] = {0.2f, 0.3f};
+
+    float out2[2];
+
+    printf("Receiver: performing forward pass on received vector...\n");
+    layer_forward(recv_buf, W2, b2, out2, 3, 2);
+
+    printf("Receiver: final 2-element output: [ ");
+    for (int i = 0; i < 2; i++) {
+        printf("%.4f ", out2[i]);
+    }
+    printf("]\n");
 
     return 0;
 }

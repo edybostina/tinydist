@@ -1,3 +1,4 @@
+#include "tinydist/nn.h"
 #include "tinydist/protocol.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -29,19 +30,27 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    float tensor_data[2][3] = {{1.1f, 2.2f, 3.3f}, {4.4f, 5.5f, 6.6f}};
-    uint32_t dims[2] = {2, 3};
+    float in[4] = {1.0f, 0.5f, -0.2f, 0.8f};
 
-    printf("Sender: sending 2x3 tensor:\n");
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 3; j++) {
-            printf("%.1f ", tensor_data[i][j]);
-        }
-        printf("\n");
+    float W[3 * 4] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f};
+
+    float b[3] = {0.1f, -0.1f, 0.0f};
+
+    float out[3];
+
+    printf("Sender: performing forward pass on 4-element input...\n");
+    layer_forward(in, W, b, out, 4, 3);
+
+    printf("Sender: output vector to send: [ ");
+    for (int i = 0; i < 3; i++) {
+        printf("%.4f ", out[i]);
     }
+    printf("]\n");
 
-    rc = tensor_send(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr), tensor_data,
-                     sizeof(tensor_data), PACKET_TENSOR_TYPE_FLOAT32, dims, 2);
+    uint32_t dims[1] = {3};
+
+    rc = tensor_send(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr), out, sizeof(out),
+                     PACKET_TENSOR_TYPE_FLOAT32, dims, 1);
 
     if (rc < 0) {
         perror("tensor_send failed");

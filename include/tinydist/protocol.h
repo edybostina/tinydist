@@ -24,7 +24,7 @@ typedef struct packet_hdr {
     msg_type_t type;
     uint32_t seq_num;
     uint32_t payload_len;
-    uint16_t checksum;
+    uint32_t checksum;
 } __attribute__((packed)) packet_hdr_t;
 
 // serialize a packet header to a buffer ready to be sent to network
