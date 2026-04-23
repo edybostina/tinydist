@@ -4,7 +4,8 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
-#define PACKET_MAGIC 0xD157
+#define PACKET_MAGIC   0xD157
+#define PACKET_VERSION 1
 
 #define PACKET_TYPE_ACK      0x0
 #define PACKET_TYPE_DATA     0x1
@@ -64,6 +65,6 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
 
 // recieve and reassemble packets into dest_buf
 // returns total bytes written, or -1 on error
-int tensor_recv(int sockfd, float *dest_buf, uint32_t dest_buf_len);
+int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len);
 
 #endif // TINYDIST_PROTOCOL_H_
