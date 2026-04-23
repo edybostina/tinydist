@@ -129,8 +129,7 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
         tensor_fragment_serialize(&current_fragment, packet_buf + sizeof(packet_hdr_t));
 
         memcpy(packet_buf + sizeof(packet_hdr_t) + sizeof(tensor_fragment_t),
-               (uint8_t *)data + (total_bytes - remaining_bytes),
-               current_packet_size - sizeof(packet_hdr_t) - sizeof(tensor_fragment_t));
+               (uint8_t *)data + (total_bytes - remaining_bytes), raw_data_to_send);
 
         rc = sendto(sockfd, packet_buf, current_packet_size, 0, dest, dest_len);
         if (rc < 0) {
@@ -145,4 +144,69 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
     return total_bytes;
 }
 
-int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len) {}
+int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len, uint8_t *data_type)
+{
+    int rc;
+    int total_recv = 0;
+    uint8_t meta_buf[sizeof(packet_hdr_t) + sizeof(tensor_meta_t)];
+    rc = recv(sockfd, meta_buf, sizeof(packet_hdr_t) + sizeof(tensor_meta_t), 0);
+    if (rc < 0)
+        return -1;
+    total_recv += rc;
+
+    packet_hdr_t meta_header;
+    packet_hdr_deserialize(&meta_header, meta_buf);
+
+    tensor_meta_t meta;
+    tensor_meta_deserialize(&meta, meta_buf + sizeof(packet_hdr_t));
+
+    // TODO: check checksum.
+
+    if (meta_header.magic != PACKET_MAGIC) {
+        return -1;
+    }
+
+    if (meta_header.type != PACKET_TYPE_METADATA) {
+        return -1;
+    }
+
+    if (meta.total_bytes > dest_buf_len) {
+        // buffer is too small to recieve data
+        return -1;
+    }
+
+    uint32_t fragment_count = meta.fragment_count;
+    uint32_t total_bytes = meta.total_bytes;
+    uint32_t remaining_bytes = total_bytes;
+    *data_type = meta.data_type;
+
+    while (fragment_count) {
+        size_t current_packet_size =
+            remaining_bytes <= 1454
+                ? remaining_bytes + sizeof(tensor_fragment_t) + sizeof(packet_hdr_t)
+                : 1472;
+
+        size_t raw_data_to_recv =
+            (current_packet_size - sizeof(packet_hdr_t) - sizeof(tensor_fragment_t));
+        packet_hdr_t header;
+        tensor_fragment_t current_fragment;
+
+        uint8_t packet_buf[1500];
+
+        rc = recv(sockfd, packet_buf, current_packet_size, 0);
+        if (rc < 0) {
+            return total_recv;
+        }
+
+        total_recv += rc;
+        packet_hdr_deserialize(&header, packet_buf);
+        tensor_fragment_deserialize(&current_fragment, packet_buf + sizeof(packet_hdr_t));
+
+        memcpy((uint8_t *)dest_buf + current_fragment.offset,
+               packet_buf + sizeof(packet_hdr_t) + sizeof(tensor_fragment_t), raw_data_to_recv);
+
+        remaining_bytes -= raw_data_to_recv;
+        fragment_count--;
+    }
+    return total_recv;
+}

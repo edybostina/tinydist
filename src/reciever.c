@@ -1,11 +1,12 @@
 #include "tinydist/protocol.h"
+#include <arpa/inet.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#include <stdbool.h>
+
 #define PORT 9000
 
 int main()
@@ -29,42 +30,26 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in client_addr;
-    uint8_t buf[sizeof(packet_hdr_t)];
-    socklen_t clen = sizeof(client_addr);
+    float recv_buf[6];
+    uint8_t data_type;
 
-    uint32_t last_seen_packet = 0;
-    bool recieved_anything = false;
+    printf("Receiver: waiting for tensor...\n");
+    rc = tensor_recv(sockfd, recv_buf, sizeof(recv_buf), &data_type);
 
-    while (1) {
-        rc = recvfrom(sockfd, buf, sizeof(packet_hdr_t), 0, (struct sockaddr *)&client_addr, &clen);
-        if (rc < 0)
-            break;
-
-        packet_hdr_t recieved_packet;
-        packet_hdr_deserialize(&recieved_packet, buf);
-
-        packet_hdr_t ack = {0};
-        ack.type = PACKET_TYPE_ACK;
-        ack.magic = PACKET_MAGIC;
-        ack.seq_num = recieved_packet.seq_num;
-        packet_hdr_serialize(&ack, buf);
-
-        rc = sendto(sockfd, buf, sizeof(ack), 0, (struct sockaddr *)&client_addr, clen);
-
-        if (last_seen_packet == recieved_packet.seq_num && recieved_anything) {
-            printf("got same packet, sending ack but dropping it\n");
-            continue;
-        }
-        last_seen_packet = recieved_packet.seq_num;
-        recieved_anything = true;
-
-        printf("recieved: \n");
-        printf("magic: %u\n", recieved_packet.magic);
-        printf("version: %u\n", recieved_packet.version);
-        printf("type: %u\n", recieved_packet.type);
-        printf("payload len: %u\n", recieved_packet.payload_len);
-        printf("seq num: %u\n", recieved_packet.seq_num);
-        printf("checksum: %u\n", recieved_packet.checksum);
+    if (rc < 0) {
+        perror("tensor_recv failed");
+        exit(EXIT_FAILURE);
     }
+
+    printf("Receiver: received %d bytes, type %u\n", rc, data_type);
+    if (data_type == PACKET_TENSOR_TYPE_FLOAT32) {
+        for (int i = 0; i < 2; i++) {
+            for (int j = 0; j < 3; j++) {
+                printf("%.1f ", recv_buf[i * 3 + j]);
+            }
+            printf("\n");
+        }
+    }
+
+    return 0;
 }

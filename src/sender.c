@@ -1,15 +1,14 @@
 #include "tinydist/protocol.h"
+#include <arpa/inet.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 
-#define PORT        9000
-#define SERVER_IP   "127.0.0.1"
-#define MAX_RETRIES 5
+#define PORT      9000
+#define SERVER_IP "127.0.0.1"
 
 int main()
 {
@@ -21,50 +20,35 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 250000; // 250ms
-
-    rc = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
-
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
     rc = inet_aton(SERVER_IP, &servaddr.sin_addr);
     if (rc == 0) {
-        perror("invalid ip");
+        fprintf(stderr, "invalid ip\n");
         exit(EXIT_FAILURE);
     }
 
-    packet_hdr_t data;
-    data.magic = PACKET_MAGIC;
-    data.checksum = 123;
-    data.payload_len = 256;
-    data.seq_num = 67;
-    data.type = PACKET_TYPE_DATA;
-    data.version = 1;
+    float tensor_data[2][3] = {{1.1f, 2.2f, 3.3f}, {4.4f, 5.5f, 6.6f}};
+    uint32_t dims[2] = {2, 3};
 
-    uint8_t buf[sizeof(packet_hdr_t)];
-    packet_hdr_serialize(&data, buf);
+    printf("Sender: sending 2x3 tensor:\n");
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 3; j++) {
+            printf("%.1f ", tensor_data[i][j]);
+        }
+        printf("\n");
+    }
 
-    int tries = MAX_RETRIES;
-send_buf:
-    if (tries == 0) {
-        perror("bad connection");
+    rc = tensor_send(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr), tensor_data,
+                     sizeof(tensor_data), PACKET_TENSOR_TYPE_FLOAT32, dims, 2);
+
+    if (rc < 0) {
+        perror("tensor_send failed");
         exit(EXIT_FAILURE);
     }
-    rc = sendto(sockfd, buf, sizeof(packet_hdr_t), 0, (struct sockaddr *)&servaddr,
-                sizeof(servaddr));
 
-    socklen_t servlen = sizeof(servaddr);
-    rc = recvfrom(sockfd, buf, sizeof(packet_hdr_t), 0, (struct sockaddr *)&servaddr, &servlen);
+    printf("Successfully sent %d bytes\n", rc);
 
-    if (rc < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
-        tries--;
-        goto send_buf;
-    }
-    packet_hdr_t recieved_data;
-    packet_hdr_deserialize(&recieved_data, buf);
-    if (recieved_data.type == PACKET_TYPE_ACK && data.seq_num == recieved_data.seq_num)
-        printf("ack for packet %u\n", recieved_data.seq_num);
+    return 0;
 }

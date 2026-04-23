@@ -65,6 +65,6 @@ int tensor_send(int sockfd, const struct sockaddr *dest, socklen_t dest_len, con
 
 // recieve and reassemble packets into dest_buf
 // returns total bytes written, or -1 on error
-int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len);
+int tensor_recv(int sockfd, void *dest_buf, uint32_t dest_buf_len, uint8_t *data_type);
 
 #endif // TINYDIST_PROTOCOL_H_
