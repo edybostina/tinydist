@@ -1,63 +1,56 @@
 #include "tinydist/nn.h"
 #include "tinydist/protocol.h"
-#include <arpa/inet.h>
-#include <errno.h>
-#include <stdint.h>
+#include "tinydist/transport_udp.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
 
 #define PORT      9000
 #define SERVER_IP "127.0.0.1"
 
 int main()
 {
-    struct sockaddr_in servaddr;
-    int sockfd, rc;
+    tinydist_udp_ctx_t udp;
+    tinydist_transport_t transport;
+    tinydist_session_t session;
 
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("socket creation failed");
+    if (tinydist_udp_sender(&udp, SERVER_IP, PORT) < 0) {
+        perror("tinydist_udp_sender");
         exit(EXIT_FAILURE);
     }
+    tinydist_udp_transport(&transport, &udp);
+    tinydist_session_init(&session);
 
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(PORT);
-    rc = inet_aton(SERVER_IP, &servaddr.sin_addr);
-    if (rc == 0) {
-        fprintf(stderr, "invalid ip\n");
-        exit(EXIT_FAILURE);
-    }
+    static const float W[3 * 4] = {
+        0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f,
+    };
+    static const float b[3] = {0.1f, -0.1f, 0.0f};
+
+    layer_t layer = {
+        .W = W,
+        .b = b,
+        .in_size = 4,
+        .out_size = 3,
+        .activation = TINYDIST_ACTIVATION_RELU,
+    };
 
     float in[4] = {1.0f, 0.5f, -0.2f, 0.8f};
-
-    float W[3 * 4] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f};
-
-    float b[3] = {0.1f, -0.1f, 0.0f};
-
     float out[3];
 
-    printf("Sender: performing forward pass on 4-element input...\n");
-    layer_forward(in, W, b, out, 4, 3);
+    printf("Sender: forward pass on 4-element input...\n");
+    layer_forward(&layer, in, out);
 
-    printf("Sender: output vector to send: [ ");
-    for (int i = 0; i < 3; i++) {
+    printf("Sender: output: [ ");
+    for (int i = 0; i < 3; i++)
         printf("%.4f ", out[i]);
-    }
     printf("]\n");
 
     uint32_t dims[1] = {3};
-
-    rc = tensor_send(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr), out, sizeof(out),
-                     PACKET_TENSOR_TYPE_FLOAT32, dims, 1);
-
+    int rc = tensor_send(&transport, &session, out, sizeof(out), TINYDIST_DTYPE_FLOAT32, dims, 1);
     if (rc < 0) {
-        perror("tensor_send failed");
+        fprintf(stderr, "tensor_send failed: %d\n", rc);
         exit(EXIT_FAILURE);
     }
 
-    printf("Successfully sent %d bytes\n", rc);
-
+    printf("Sender: sent %d bytes\n", rc);
     return 0;
 }

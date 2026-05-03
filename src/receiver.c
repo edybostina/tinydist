@@ -1,72 +1,63 @@
 #include "tinydist/nn.h"
 #include "tinydist/protocol.h"
-#include <arpa/inet.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include "tinydist/transport_udp.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
 
 #define PORT 9000
 
 int main()
 {
-    int sockfd;
-    struct sockaddr_in servaddr;
+    tinydist_udp_ctx_t udp;
+    tinydist_transport_t transport;
+    tinydist_session_t session;
 
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("socket creation failed");
+    if (tinydist_udp_receiver(&udp, PORT) < 0) {
+        perror("tinydist_udp_receiver");
         exit(EXIT_FAILURE);
     }
+    tinydist_udp_transport(&transport, &udp);
+    tinydist_session_init(&session);
 
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(PORT);
+    static const float W2[2 * 3] = {
+        0.5f, -0.5f, 1.0f, -1.0f, 0.5f, 0.5f,
+    };
+    static const float b2[2] = {0.2f, 0.3f};
 
-    int rc = bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr));
-    if (rc < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
+    layer_t layer = {
+        .W = W2,
+        .b = b2,
+        .in_size = 3,
+        .out_size = 2,
+        .activation = TINYDIST_ACTIVATION_NONE,
+    };
 
     float recv_buf[3];
-    uint8_t data_type;
+    tinydist_data_type_t data_type;
 
     printf("Receiver: waiting for tensor...\n");
-    rc = tensor_recv(sockfd, recv_buf, sizeof(recv_buf), &data_type);
-
+    int rc = tensor_recv(&transport, &session, recv_buf, sizeof(recv_buf), &data_type);
     if (rc < 0) {
-        perror("tensor_recv failed");
+        fprintf(stderr, "tensor_recv failed: %d\n", rc);
         exit(EXIT_FAILURE);
     }
 
-    printf("Receiver: received %d bytes, type %u\n", rc, data_type);
-    if (data_type != PACKET_TENSOR_TYPE_FLOAT32) {
-        fprintf(stderr, "unexpected data type\n");
+    if (data_type != TINYDIST_DTYPE_FLOAT32) {
+        fprintf(stderr, "unexpected data type %u\n", data_type);
         exit(EXIT_FAILURE);
     }
 
-    printf("Receiver: received 3-element vector: [ ");
-    for (int i = 0; i < 3; i++) {
+    printf("Receiver: got %d bytes, input: [ ", rc);
+    for (int i = 0; i < 3; i++)
         printf("%.4f ", recv_buf[i]);
-    }
     printf("]\n");
 
-    float W2[2 * 3] = {0.5f, -0.5f, 1.0f, -1.0f, 0.5f, 0.5f};
-
-    float b2[2] = {0.2f, 0.3f};
-
     float out2[2];
+    layer_forward(&layer, recv_buf, out2);
 
-    printf("Receiver: performing forward pass on received vector...\n");
-    layer_forward(recv_buf, W2, b2, out2, 3, 2);
-
-    printf("Receiver: final 2-element output: [ ");
-    for (int i = 0; i < 2; i++) {
+    printf("Receiver: output: [ ");
+    for (int i = 0; i < 2; i++)
         printf("%.4f ", out2[i]);
-    }
     printf("]\n");
 
     return 0;
